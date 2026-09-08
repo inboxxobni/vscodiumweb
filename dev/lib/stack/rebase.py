@@ -141,8 +141,8 @@ def _rebase_finish(repo, state):
         print(f"Then point {pin} at {state['onto']} so a fresh clone builds against it.")
 
 
-def _conflict_mode(repo, reject):
-    configured = subprocess.run(["git", "-C", repo, "config", "--get", "vscodium.conflicts"],
+def _conflict_mode(reject):
+    configured = subprocess.run(["git", "config", "--get", "vscodium.conflicts"],
                                 capture_output=True, text=True).stdout.strip()
     if configured not in ("", "3way", "reject"):
         fail(f"vscodium.conflicts is {configured!r}; use 3way or reject.")
@@ -172,7 +172,7 @@ def rebase_start(repo, patches_root, onto, quality, os_name, until, reject=False
         "onto": onto, "old_base": base, "old_head": rev(repo, "HEAD"), "old_tip": rev(repo, HEAD_REF),
         "old_dirs": imported, "dirs": dirs, "quality": quality, "os_name": os_name,
         "todo": todo, "done": [], "current": None, "step_head": None, "mode": "3way", "rej": [], "until": until,
-        "conflicts": _conflict_mode(repo, reject),
+        "conflicts": _conflict_mode(reject),
     }
     snapshot_patches(repo, dirs)
     exclude_rejects(repo)
