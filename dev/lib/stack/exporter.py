@@ -14,8 +14,9 @@ from .importer import import_stack
 def _stack_patches(repo, base):
     shas = git(repo, "rev-list", "--reverse", base + "..HEAD").split()
     patches = egit.split_patches(egit.format_patch(repo, base + "..HEAD"))
-    if len(shas) != len(patches):
-        empty = [s for s in shas if not git(repo, "diff-tree", "--no-commit-id", "-r", "--name-only", s).strip()]
+    touching = set(split_lines(git(repo, "rev-list", base + "..HEAD", "--", ".")))
+    empty = [s for s in shas if s not in touching]
+    if empty or len(shas) != len(patches):
         fail("refusing to export commit(s) with no changes:\n"
               + "".join(f"  {git(repo, 'log', '-1', '--format=%h %s', s)}" for s in empty)
               + "Drop them (git rebase) and re-run ./dev/export.sh.")
@@ -215,7 +216,8 @@ def _verify_roundtrip(repo, patches_root, present_dirs, before, tip_before):
             import_stack(repo, patches_root, dirs=present_dirs)
         except BaseException as exc:
             restore()
-            fail(f"SELF-VERIFY FAILED: re-import errored ({exc}).\n"
+            why = "" if isinstance(exc, SystemExit) else f" ({exc})"
+            fail(f"SELF-VERIFY FAILED: the re-import failed{why}.\n"
                   f"vscode/ and patches/ were restored; nothing was written.")
         got_tree = git(repo, "rev-parse", "HEAD^{tree}").strip()
         if got_tree != want_tree:
