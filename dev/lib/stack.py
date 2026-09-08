@@ -426,9 +426,9 @@ def _apply_json(repo, d, name, lenient, span=None):
     return None, missing
 
 
-def _run_am(repo, mailbox, config=()):
+def _run_am(repo, mailbox, config=(), threeway=True):
     proc = subprocess.run(
-        ["git", "-C", repo, *GIT_CONFIG, *config, "am", "--keep", "--3way", "--keep-cr"],
+        ["git", "-C", repo, *GIT_CONFIG, *config, "am", "--keep", "--keep-cr"] + (["--3way"] if threeway else []),
         input=mailbox.encode("utf-8"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if proc.returncode == 0:
         return None
@@ -450,11 +450,11 @@ def _apply_plain(repo, d, name):
     return None
 
 
-def apply_step(repo, d, name, lenient=False, config=(), span=None):
+def apply_step(repo, d, name, lenient=False, config=(), span=None, threeway=True):
     if name.endswith(".json"):
         return _apply_json(repo, d, name, lenient, span)
     if _is_mailbox(os.path.join(d, name)):
-        return _run_am(repo, read_mailbox(d, name), config), []
+        return _run_am(repo, read_mailbox(d, name), config, threeway), []
     return _apply_plain(repo, d, name), []
 
 
@@ -938,7 +938,7 @@ def _print_rows(repo, state):
 def _report_conflict(repo, state, label, error):
     print(f"\n{label} did not apply cleanly:")
     sys.stdout.write("".join(f"  {ln}\n" for ln in error.splitlines()))
-    if state["mode"] == "reject":
+    if state["mode"] == "reject" and state.get("conflicts") != "reject":
         print("  (no 3-way merge: the upstream this patch was made against is not in this clone)")
     print()
     _print_rows(repo, state)
@@ -991,7 +991,8 @@ def _rebase_run(repo, state, until=None):
         _write_state(repo, state)
         try:
             error, missing = apply_step(repo, d, name, lenient=True, config=_rebase_config(),
-                                        span=(state["old_base"], state["onto"]))
+                                        span=(state["old_base"], state["onto"]),
+                                        threeway=state.get("conflicts") != "reject")
         except KeyboardInterrupt:
             _git_ok(repo, "am", "--abort")
             if _rev(repo, "HEAD") != state["step_head"]:
@@ -1077,7 +1078,15 @@ def _rebase_finish(repo, state):
         print(f"Then point {pin} at {state['onto']} so a fresh clone builds against it.")
 
 
-def rebase_start(repo, patches_root, onto, quality, os_name, until):
+def _conflict_mode(repo, reject):
+    configured = subprocess.run(["git", "-C", repo, "config", "--get", "vscodium.conflicts"],
+                                capture_output=True, text=True).stdout.strip()
+    if configured not in ("", "3way", "reject"):
+        _fail(f"vscodium.conflicts is {configured!r}; use 3way or reject.")
+    return "reject" if reject or configured == "reject" else "3way"
+
+
+def rebase_start(repo, patches_root, onto, quality, os_name, until, reject=False):
     base = _require_base(repo)
     if read_state(repo):
         _fail("A rebase is already in progress (./dev/rebase.sh --status).")
@@ -1100,6 +1109,7 @@ def rebase_start(repo, patches_root, onto, quality, os_name, until):
         "onto": onto, "old_base": base, "old_head": _rev(repo, "HEAD"), "old_tip": _rev(repo, HEAD_REF),
         "old_dirs": imported, "dirs": dirs, "quality": quality, "os_name": os_name,
         "todo": todo, "done": [], "current": None, "step_head": None, "mode": "3way", "rej": [], "until": until,
+        "conflicts": _conflict_mode(repo, reject),
     }
     _write_state(repo, state)
     _write_stack_dirs(repo, dirs)
@@ -1108,10 +1118,11 @@ def rebase_start(repo, patches_root, onto, quality, os_name, until):
     egit.update_ref(repo=repo, ref=BASE_REF, newvalue=onto)
     _git_c(repo, "reset", "-q", "--hard", onto)
     config = _config_label(quality, os_name)
+    how = " with .rej files" if state["conflicts"] == "reject" else ""
     if onto == base:
-        print(f"Re-applying {_n(len(todo), 'patch')} ({config}) onto {onto[:8]}")
+        print(f"Re-applying {_n(len(todo), 'patch')} ({config}) onto {onto[:8]}{how}")
     else:
-        print(f"Rebasing {_n(len(todo), 'patch')} ({config}): {base[:8]} -> {onto[:8]}")
+        print(f"Rebasing {_n(len(todo), 'patch')} ({config}): {base[:8]} -> {onto[:8]}{how}")
     _rebase_run(repo, state, until)
 
 
@@ -1253,6 +1264,8 @@ def rebase_status(repo):
           f"{len(applied)} applied, {len(skipped)} skipped, {len(pending)} pending")
     if state.get("until"):
         print(f"  stops after {state['until']}")
+    if state.get("conflicts") == "reject":
+        print("  conflicts: .rej files")
     commits = egit.get_commit_count(repo, state["onto"] + "..HEAD")
     if commits != len(applied) + (1 if state["current"] and _head_is(repo, state["current"][1]) else 0):
         print(f"  note: {_n(commits, 'commit')} on the stack for {_n(len(applied), 'applied patch')}; "
@@ -1364,6 +1377,9 @@ def main(argv):
     p.add_argument("--abort", action="store_true", help="restore vscode/ as it was before the rebase")
     p.add_argument("--status", action="store_true")
     p.add_argument("--until", metavar="PATCH", help="stop after this patch")
+    p.add_argument("--reject", action="store_true",
+                   help="leave conflicts as .rej files instead of conflict markers "
+                        "(default when git config vscodium.conflicts is reject)")
     p.add_argument("-f", "--force", action="store_true", help="with --abort: discard unexported patches")
     args = parser.parse_args(argv)
 
@@ -1382,7 +1398,7 @@ def main(argv):
     elif args.cont or args.skip is not None:
         rebase_continue(args.repo, args.until, skip=args.skip)
     else:
-        rebase_start(args.repo, args.patches, args.onto, args.quality, args.os_name, args.until)
+        rebase_start(args.repo, args.patches, args.onto, args.quality, args.os_name, args.until, args.reject)
 
 
 if __name__ == "__main__":
