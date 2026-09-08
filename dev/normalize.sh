@@ -26,4 +26,6 @@ done
 
 echo
 echo "Normalized ${QUALITY} patches. Review 'git diff patches/'."
-echo "For insider-only patches, re-run on an insider checkout with VSCODE_QUALITY=insider."
+if [[ "${QUALITY}" != "insider" ]]; then
+  echo "For insider-only patches, re-run on an insider checkout with VSCODE_QUALITY=insider."
+fi
