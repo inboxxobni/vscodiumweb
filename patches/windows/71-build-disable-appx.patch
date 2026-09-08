@@ -5,10 +5,10 @@ Subject: 71-build-disable-appx
 
 
 diff --git a/build/gulpfile.vscode.ts b/build/gulpfile.vscode.ts
-index 79aa99bf81f67ceb9cddf2c3b35018e7055771e3..aca2a56ca9975d4839bd594d966fabff600a0f02 100644
+index 0ea57f27122c1e6861c5127c12dfb3167694f8e7..59f4d4bd5c3df81a45241ec138b3adda97e1dd1e 100644
 --- a/build/gulpfile.vscode.ts
 +++ b/build/gulpfile.vscode.ts
-@@ -541,22 +541,22 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
+@@ -542,22 +542,22 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
  			result = es.merge(result, gulp.src('.build/policies/win32/**', { base: '.build/policies/win32' })
  				.pipe(rename(f => f.dirname = `policies/${f.dirname}`)));
  

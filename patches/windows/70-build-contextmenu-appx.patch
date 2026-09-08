@@ -5,10 +5,10 @@ Subject: 70-build-contextmenu-appx
 
 
 diff --git a/build/gulpfile.vscode.ts b/build/gulpfile.vscode.ts
-index 00410b1b808a67d79f1b8e3189ce7289c1975c52..79aa99bf81f67ceb9cddf2c3b35018e7055771e3 100644
+index af694aa05ceeed1fe9da4d1b851389f12d1d6213..0ea57f27122c1e6861c5127c12dfb3167694f8e7 100644
 --- a/build/gulpfile.vscode.ts
 +++ b/build/gulpfile.vscode.ts
-@@ -544,7 +544,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
+@@ -545,7 +545,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
  			if (quality === 'stable' || quality === 'insider') {
  				result = es.merge(result, gulp.src('.build/win32/appx/**', { base: '.build/win32' }));
  				const rawVersion = version.replace(/-\w+$/, '').split('.');

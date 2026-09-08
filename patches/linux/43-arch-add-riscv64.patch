@@ -60,10 +60,10 @@ index 1a7c298789e7dff2caea7e9fc27a1863e2b10563..b8173d7d2be75193a107c19c67c181d0
  
  BUILD_TARGETS.forEach(({ arch }) => {
 diff --git a/build/gulpfile.vscode.ts b/build/gulpfile.vscode.ts
-index 00cff30be142849939eb5d93907d8d2cc7b2eb3b..fd5a9f6c13e4ce8785234c728d6ba1e03c3051c4 100644
+index 1d45e82bc7cc274f9f792ec23e980d4e520d111e..e91f7ceb8d309c826dd56aa8759c13a4c9f66d73 100644
 --- a/build/gulpfile.vscode.ts
 +++ b/build/gulpfile.vscode.ts
-@@ -674,6 +674,7 @@ const BUILD_TARGETS = [
+@@ -675,6 +675,7 @@ const BUILD_TARGETS = [
  	{ platform: 'linux', arch: 'armhf' },
  	{ platform: 'linux', arch: 'arm64' },
  	{ platform: 'linux', arch: 'ppc64le' },

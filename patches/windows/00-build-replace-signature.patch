@@ -70,7 +70,7 @@ index f52ee29c2cb929ce48157a20a9c27ec61852b3cf..8401855026b344ea026220ff7e8f8805
  					'ProductName': productContents.nameLong,
  					'ProductVersion': packageJsonContents.version,
 diff --git a/build/gulpfile.vscode.ts b/build/gulpfile.vscode.ts
-index 045144b04612e7a33586ddfac8f6f192106055cc..00410b1b808a67d79f1b8e3189ce7289c1975c52 100644
+index 9208d643a843ea21e9a5e743acad80657bb2b468..af694aa05ceeed1fe9da4d1b851389f12d1d6213 100644
 --- a/build/gulpfile.vscode.ts
 +++ b/build/gulpfile.vscode.ts
 @@ -19,7 +19,6 @@ import { inlineMeta } from './lib/inlineMeta.ts';
@@ -89,7 +89,7 @@ index 045144b04612e7a33586ddfac8f6f192106055cc..00410b1b808a67d79f1b8e3189ce7289
  
  
  const glob = promisify(globCallback);
-@@ -576,38 +576,6 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
+@@ -577,38 +577,6 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
  	return task;
  }
  
@@ -128,7 +128,7 @@ index 045144b04612e7a33586ddfac8f6f192106055cc..00410b1b808a67d79f1b8e3189ce7289
  function patchWin32DependenciesTask(destinationFolderName: string) {
  	const cwd = path.join(path.dirname(root), destinationFolderName);
  
-@@ -631,11 +599,11 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
+@@ -632,11 +600,11 @@ function patchWin32DependenciesTask(destinationFolderName: string) {
  			await rcedit(fullPath, {
  				'file-version': baseVersion,
  				'version-string': {

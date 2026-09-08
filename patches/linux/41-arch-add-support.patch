@@ -62,7 +62,7 @@ index f52ee29c2cb929ce48157a20a9c27ec61852b3cf..fba080c7a2d191116c932a2324d91903
  		}
  		case 'alpine':
 diff --git a/build/gulpfile.vscode.ts b/build/gulpfile.vscode.ts
-index 045144b04612e7a33586ddfac8f6f192106055cc..6249712a2f02cb48f9afe56063eb306daea816fb 100644
+index 9208d643a843ea21e9a5e743acad80657bb2b468..6bff1769cf351d41a24f4668a2ecdf8a1b208a76 100644
 --- a/build/gulpfile.vscode.ts
 +++ b/build/gulpfile.vscode.ts
 @@ -371,7 +371,10 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
@@ -77,7 +77,7 @@ index 045144b04612e7a33586ddfac8f6f192106055cc..6249712a2f02cb48f9afe56063eb306d
  		const deps = es.merge(cleanedDeps, osProxyResolverPlatformPackage)
  			.pipe(filter(getRipgrepExcludeFilter(platform, arch)))
  			.pipe(filter(getMxcExcludeFilter(arch)))
-@@ -469,8 +472,21 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
+@@ -470,8 +473,21 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
  			all = es.merge(all, shortcut, policyDest);
  		}
  
