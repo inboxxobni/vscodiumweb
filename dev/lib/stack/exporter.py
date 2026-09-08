@@ -3,7 +3,7 @@ import sys
 
 import git as egit
 
-from .repo import (BASE_REF, HEAD_REF, fail, git, git_c, git_dir, git_ok, mid_operation, plural,
+from .repo import (BASE_REF, HEAD_REF, fail, git, git_c, git_dir, git_ok, mid_operation, plural, split_lines,
                    require_base, rev)
 from .layout import PATCH_EXTENSIONS, config_from_dirs, config_label, read_stack_dirs, stem
 from .patchfile import json_content, mailbox_content, target_of
@@ -74,6 +74,8 @@ def export_stack(repo, patches_root, dry_run=False, verify=True):
     merges = git(repo, "rev-list", "--merges", base + "..HEAD").strip()
     if merges:
         fail("the patch stack must be linear; found merge commit(s):\n" + merges)
+    if state and not (state["done"] or state["current"]) and rev(repo, "HEAD") != state["onto"]:
+        fail("the rebase was interrupted before its first patch; run ./dev/rebase.sh --continue or --abort first.")
     if not state and (not rev(repo, HEAD_REF) or mid_operation(repo)):
         fail("vscode/ does not hold a fully imported patch stack; refusing to rewrite patches/.\n"
               "Finish or abort the am/rebase in vscode/, or run ./dev/build.sh to re-import.")

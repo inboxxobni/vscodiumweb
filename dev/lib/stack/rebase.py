@@ -9,7 +9,7 @@ import git as egit
 from .repo import (BASE_REF, HEAD_REF, fail, git, git_c, git_dir, git_ok, git_version, plural, require_base,
                    rev, split_lines, tree_path)
 from .layout import (build_dirs, config_from_dirs, config_label, matches, patch_order, read_stack_dirs,
-                       stem, write_stack_dirs)
+                     stem, write_stack_dirs)
 from .patchfile import TAG_RE, is_mailbox, patch_sections
 from .apply import apply_step, plain_message
 from .state import (applied_skipped, drop_state, read_state, remove_rejects, require_state,
@@ -23,12 +23,28 @@ def _rebase_config():
     return ["-c", "merge.conflictStyle=" + style]
 
 
+def _started(state):
+    return state["done"] or state["current"]
+
+
+def _start_onto(repo, state):
+    if _started(state):
+        return
+    try:
+        egit.update_ref(repo=repo, ref=BASE_REF, newvalue=state["onto"])
+        git_c(repo, "reset", "-q", "--hard", state["onto"])
+    except KeyboardInterrupt:
+        print("\nPaused; ./dev/rebase.sh --continue resumes.")
+        sys.exit(1)
+
+
 def _rebase_run(repo, state, until=None):
     if until and not any(matches(until, d, name) for d, name in state["todo"]):
         fail(f"{until} is not among the pending patches (./dev/rebase.sh --status).")
     if until:
         state["until"] = until
     until = state.get("until")
+    _start_onto(repo, state)
     while state["todo"]:
         d, name = state["todo"][0]
         label = os.path.join(d, name)
@@ -66,6 +82,7 @@ def _rebase_run(repo, state, until=None):
             step_done(state, "applied")
             if missing:
                 state.setdefault("notes", []).append(f"{label}: no longer upstream, dropped: {', '.join(missing)}")
+            write_state(repo, state)
             print(f"applied {label}" + (f" ({plural(len(missing), 'path')} no longer upstream, dropped: "
                                        f"{', '.join(missing)})" if missing else ""))
         write_state(repo, state)
@@ -157,12 +174,10 @@ def rebase_start(repo, patches_root, onto, quality, os_name, until, reject=False
         "todo": todo, "done": [], "current": None, "step_head": None, "mode": "3way", "rej": [], "until": until,
         "conflicts": _conflict_mode(repo, reject),
     }
-    write_state(repo, state)
-    write_stack_dirs(repo, dirs)
     snapshot_patches(repo, dirs)
     exclude_rejects(repo)
-    egit.update_ref(repo=repo, ref=BASE_REF, newvalue=onto)
-    git_c(repo, "reset", "-q", "--hard", onto)
+    write_state(repo, state)
+    write_stack_dirs(repo, dirs)
     config = config_label(quality, os_name)
     how = " with .rej files" if state["conflicts"] == "reject" else ""
     if onto == base:
@@ -220,6 +235,7 @@ def _finish_step(repo, state, label, am):
 
 def rebase_continue(repo, until=None, skip=None):
     state = require_state(repo)
+    _start_onto(repo, state)
     until = until or state.get("until")
     current = state["current"]
     if skip and not (current and matches(skip, *current)):
@@ -285,7 +301,8 @@ def rebase_continue(repo, until=None, skip=None):
 
 def rebase_abort(repo, force):
     state = require_state(repo)
-    unsaved = egit.get_commit_count(repo, state["onto"] + "..HEAD")
+    since = state["onto"] if git_ok(repo, "merge-base", "--is-ancestor", state["onto"], "HEAD") else state["old_head"]
+    unsaved = egit.get_commit_count(repo, since + "..HEAD")
     if unsaved and not force:
         fail(f"--abort would discard {plural(unsaved, 'rebased commit')} and any patches "
               f"./dev/export.sh wrote during the rebase.\n"
@@ -293,7 +310,8 @@ def rebase_abort(repo, force):
     restore_from_state(repo, state)
     print(f"vscode/ is back on {state['old_head'][:8]} (base {state['old_base'][:8]}) with its "
           f"{plural(len(state['todo']) + len(state['done']), 'patch')}.")
-    if os.path.isdir(os.path.join(git_dir(repo), "rr-cache")):
+    rr_cache = os.path.join(git_dir(repo), "rr-cache")
+    if os.path.isdir(rr_cache) and os.listdir(rr_cache):
         print("rerere still remembers the conflicts you resolved; `git -C vscode rerere clear` forgets them.")
 
 
@@ -309,7 +327,9 @@ def rebase_status(repo):
     if state.get("conflicts") == "reject":
         print("  conflicts: .rej files")
     commits = egit.get_commit_count(repo, state["onto"] + "..HEAD")
-    if commits != len(applied) + (1 if state["current"] and _head_is(repo, state["current"][1]) else 0):
+    if not _started(state) and rev(repo, "HEAD") != state["onto"]:
+        print("  interrupted before the first patch; ./dev/rebase.sh --continue resumes")
+    elif commits != len(applied) + (1 if state["current"] and _head_is(repo, state["current"][1]) else 0):
         print(f"  note: {plural(commits, 'commit')} on the stack for {plural(len(applied), 'applied patch')}; "
               f"./dev/export.sh writes untagged ones as user patches")
     if state["current"]:

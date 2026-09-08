@@ -4,7 +4,7 @@ import shutil
 
 import git as egit
 
-from .repo import BASE_REF, HEAD_REF, fail, git_c, git_dir, git_ok, tree_path
+from .repo import BASE_REF, HEAD_REF, fail, git, git_c, git_dir, git_ok, split_lines, tree_path
 from .layout import PATCH_EXTENSIONS, matches, write_stack_dirs
 
 
@@ -85,6 +85,10 @@ def restore_from_state(repo, state):
     git_ok(repo, "am", "--abort")
     remove_rejects(repo, state)
     git_c(repo, "reset", "-q", "--hard", state["old_head"])
+    added = split_lines(git(repo, "diff", "--name-only", "--no-renames", "--diff-filter=A", state["old_head"], state["onto"]))
+    stray = sorted(set(added) & set(split_lines(git(repo, "ls-files", "--others", "--exclude-standard"))))
+    if stray:
+        git_ok(repo, "clean", "-fq", "--", *stray)
     egit.update_ref(repo=repo, ref=BASE_REF, newvalue=state["old_base"])
     if state["old_tip"]:
         egit.update_ref(repo=repo, ref=HEAD_REF, newvalue=state["old_tip"])

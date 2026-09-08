@@ -38,7 +38,11 @@ def git(repo, *args):
 
 
 def git_c(repo, *args):
-    subprocess.check_call(["git", "-C", repo, *GIT_CONFIG, *args])
+    code = subprocess.call(["git", "-C", repo, *GIT_CONFIG, *args])
+    if code in (-2, 130):
+        raise KeyboardInterrupt
+    if code:
+        fail(f"git {args[0]} failed in {repo}/")
 
 
 def git_ok(repo, *args):
