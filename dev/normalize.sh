@@ -17,8 +17,8 @@ QUALITY="${VSCODE_QUALITY:-stable}"
 
 for os in linux osx windows; do
   echo "== ${QUALITY}/${os} =="
-  VSCODE_QUALITY="${QUALITY}" OS_NAME="${os}" python3 dev/lib/stack.py import
-  python3 dev/lib/stack.py export --no-verify
+  VSCODE_QUALITY="${QUALITY}" OS_NAME="${os}" python3 dev/lib/stack import
+  python3 dev/lib/stack export --no-verify
 done
 
 # The loop leaves the last OS's stack checked out; force the next build to re-import.

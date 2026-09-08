@@ -15,4 +15,4 @@ case " $* " in
     ;;
 esac
 
-exec python3 dev/lib/stack.py rebase "$@"
+exec python3 dev/lib/stack rebase "$@"

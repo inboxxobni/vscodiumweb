@@ -10,7 +10,7 @@ Each patch is a git commit in `vscode/`, on top of `refs/vscodium/base` (the
 upstream commit, recorded by `get_repo.sh`). `refs/vscodium/head` is the commit
 `patches/` reproduces; only import and export move it, so commits past it are not
 in any patch file yet. Import and export use Electron's patch tooling, vendored in
-`dev/lib/` (MIT, see `dev/lib/NOTICE`) and driven by `dev/lib/stack.py`.
+`dev/lib/` (MIT, see `dev/lib/NOTICE`) and driven by the `dev/lib/stack/` package.
 
 Patch directories apply in order: `patches/`, `patches/insider/`
 (`VSCODE_QUALITY=insider`), `patches/<os>/` (`OS_NAME`), `patches/user/`. Each

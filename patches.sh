@@ -156,7 +156,7 @@ ensure_stack() {
       echo "patch set or config changed; re-importing the stack"
     fi
     guard_unexported
-    ( cd .. && python3 dev/lib/stack.py import )
+    ( cd .. && python3 dev/lib/stack import )
     clear_materialized
     record_patches_hash
   fi
