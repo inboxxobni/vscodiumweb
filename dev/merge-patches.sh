@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# DEPRECATED. See docs/patches.md.
+# DEPRECATED. See docs/howto-patches.md.
 
-echo "dev/merge-patches.sh is deprecated — squash the commits with 'git rebase -i' then ./dev/export.sh (see docs/patches.md)." >&2
+echo "dev/merge-patches.sh is deprecated — squash the commits with 'git rebase -i' then ./dev/export.sh (see docs/howto-patches.md)." >&2
 exit 2

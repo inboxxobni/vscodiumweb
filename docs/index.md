@@ -42,3 +42,4 @@
   - [What are reh and reh-web archives?](https://github.com/VSCodium/vscodium/blob/master/docs/others.md#reh)
 - [Contributing Guidelines](https://github.com/VSCodium/vscodium/blob/master/CONTRIBUTING.md)
 - [Building VSCodium](https://github.com/VSCodium/vscodium/blob/master/docs/howto-build.md)
+- [Working on the patches](https://github.com/VSCodium/vscodium/blob/master/docs/howto-patches.md)

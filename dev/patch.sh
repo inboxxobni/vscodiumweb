@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# DEPRECATED. See docs/patches.md.
+# DEPRECATED. See docs/howto-patches.md.
 
-echo "dev/patch.sh is deprecated — see docs/patches.md." >&2
+echo "dev/patch.sh is deprecated — see docs/howto-patches.md." >&2
 
 if [[ -n "${1:-}" ]]; then
   echo >&2

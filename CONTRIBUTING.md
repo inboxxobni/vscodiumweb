@@ -39,8 +39,8 @@ To build VSCodium, please follow the command found in the section [`Build Script
 
 ### Updating patches
 
-If you want to update the existing patches, please follow the section [`Modify an existing patch`](./docs/howto-build.md#modify-an-existing-patch).
+If you want to update the existing patches, please follow the section [`Modify a Patch`](./docs/howto-patches.md#patch-modify).
 
 ### Add a new patch
 
-Please follow the section [`Add a new patch`](./docs/howto-build.md#add-a-new-patch).
+Please follow the section [`Add a Patch`](./docs/howto-patches.md#patch-add).
