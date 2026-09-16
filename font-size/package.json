@@ -25,7 +25,7 @@
 		"@zokugun/fs-extra-plus": "0.6.2",
 		"@zokugun/xtry": "0.12.1",
 		"fast-glob": "3.3.3",
-		"postcss": "8.5.26"
+		"postcss": "8.5.28"
 	},
 	"devDependencies": {
 		"@types/node": "22.20.1",
