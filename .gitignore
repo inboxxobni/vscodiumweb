@@ -19,3 +19,16 @@ stores/snapcraft/insider/*.snap
 stores/snapcraft/stable/*.snap
 font-size/node_modules/
 font-size/generate-css.js
+
+# Web build output
+web-build/
+web-build.tar.gz
+
+# Build logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

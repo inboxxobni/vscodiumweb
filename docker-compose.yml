@@ -1,0 +1,41 @@
+# ── VSCodium Web — Docker Compose ─────────────────────────────────────────────
+#
+# Quick start:
+#   docker compose up -d
+#   # Open http://localhost:8000 in your browser
+#
+# With security token:
+#   CONNECTION_TOKEN=mysecret docker compose up -d
+#   # Open http://localhost:8000/?tkn=mysecret
+#
+# Build from source (instead of pulling pre-built):
+#   docker compose build
+#   docker compose up -d
+#
+# Stop:
+#   docker compose down
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  vscodium-web:
+    build: .
+    container_name: vscodium-web
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      # Set a connection token for security (optional):
+      # - CONNECTION_TOKEN=changeme
+      # Or use a file:
+      # - CONNECTION_TOKEN_FILE=/config/token
+      # - SUDO_PASSWORD=password
+    volumes:
+      # Persist configuration and installed extensions
+      - vscodium-web-config:/config
+      # Optionally mount local projects:
+      # - ./my-project:/workspace
+    restart: unless-stopped
+
+volumes:
+  vscodium-web-config:

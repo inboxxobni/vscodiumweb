@@ -126,6 +126,45 @@ flatpak run com.vscodium.codium
 
 Build instructions can be found [here](https://github.com/VSCodium/vscodium/blob/master/docs/howto-build.md)
 
+## <a id="web-version"></a>VSCodium Web — Browser-Based Editor
+
+VSCodium Web is the **web server component** that serves the full VSCodium editor in a browser — **no Electron, no desktop GUI required**. It uses the built-in `reh-web` (Remote Extension Host web) from VS Code/VSCodium.
+
+### Quick Start
+
+```bash
+# Build the web version (fetches VS Code source + applies patches + builds reh-web)
+./build_web.sh
+
+# Run the web server
+./web-build/run.sh
+
+# Open http://localhost:8000 in your browser
+```
+
+### Docker
+
+```bash
+# Build and run with Docker
+docker compose up -d
+# Open http://localhost:8000
+
+# Or with a security token
+CONNECTION_TOKEN=mysecret docker compose up -d
+# Open http://localhost:8000/?tkn=mysecret
+```
+
+### Features
+
+- Full VSCodium editor in the browser (Monaco editor, file browser, terminal, Git)
+- No Electron runtime needed — runs on any system with Node.js
+- Cross-platform: Linux, macOS, Windows, Docker
+- Extensions via Open VSX marketplace
+- Terminal access, Git integration, file system access
+- Security token support for access control
+
+For full documentation, see [docs/web-version.md](docs/web-version.md).
+
 ## <a id="why"></a>Why Does This Exist
 
 This repository contains build files to generate free release binaries of Microsoft's Visual Studio Code. When we speak of "free software", we're talking about freedom, not price.
