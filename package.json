@@ -1,0 +1,24 @@
+{
+  "name": "vscodiumweb",
+  "version": "1.0.0",
+  "description": "VSCodium Web — Browser-based editor without Electron",
+  "private": true,
+  "scripts": {
+    "build": "bash build_web.sh",
+    "build:linux-x64": "VSCODE_ARCH=x64 OS_NAME=linux bash build_web.sh",
+    "build:linux-arm64": "VSCODE_ARCH=arm64 OS_NAME=linux bash build_web.sh",
+    "build:macos-arm64": "VSCODE_ARCH=arm64 OS_NAME=darwin bash build_web.sh",
+    "build:win-x64": "VSCODE_ARCH=x64 OS_NAME=win32 bash build_web.sh",
+    "build:run": "bash build_web.sh && bash scripts/start_server.sh",
+    "start": "bash scripts/start_server.sh",
+    "dev": "PORT=8000 HOST=0.0.0.0 bash scripts/start_server.sh --without-token",
+    "local": "PORT=8000 HOST=127.0.0.1 bash scripts/start_server.sh --without-token",
+    "daemon": "bash scripts/start_server_daemon.sh",
+    "stop": "bash scripts/stop_server.sh",
+    "status": "bash scripts/status_server.sh",
+    "lint": "shellcheck build_web.sh run_web.sh scripts/*.sh",
+    "test": "bash build/smoke-test.sh"
+  },
+  "keywords": ["vscodium", "vscode", "web", "editor", "reh-web"],
+  "license": "MIT"
+}

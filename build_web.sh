@@ -11,6 +11,13 @@
 #   ./build_web.sh                    # Build for current platform (x64)
 #   VSCODE_ARCH=arm64 ./build_web.sh  # Build for ARM64
 #   OS_NAME=linux ./build_web.sh      # Build for Linux
+#   OS_NAME=osx ./build_web.sh        # Build for macOS
+#   OS_NAME=windows ./build_web.sh    # Build for Windows
+#
+# Platform auto-detection (overridable via OS_NAME):
+#   Linux   → linux
+#   macOS   → osx
+#   Windows → windows (Git Bash / MSYS2 / Cygwin detected automatically)
 #
 # Environment variables:
 #   VSCODE_QUALITY    - "stable" (default) or "insider"
@@ -29,7 +36,19 @@ cd "${SCRIPT_DIR}"
 
 VSCODE_QUALITY="${VSCODE_QUALITY:-stable}"
 VSCODE_ARCH="${VSCODE_ARCH:-x64}"
-OS_NAME="${OS_NAME:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
+OS_NAME="${OS_NAME:-}"
+
+# Auto-detect OS if not set
+if [[ -z "${OS_NAME}" ]]; then
+  UNAME_S="$(uname -s)"
+  case "${UNAME_S}" in
+    MINGW*|MSYS*|CYGWIN*) OS_NAME="windows"  ;;
+    Linux*)               OS_NAME="linux"    ;;
+    Darwin*)              OS_NAME="osx"      ;;
+    *)                    echo "Unknown OS: ${UNAME_S}"; exit 1 ;;
+  esac
+fi
+
 CI_BUILD="${CI_BUILD:-no}"
 SHOULD_BUILD="${SHOULD_BUILD:-yes}"
 DISABLE_UPDATE="${DISABLE_UPDATE:-yes}"
@@ -38,7 +57,7 @@ MAX_OLD_SPACE_SIZE="${MAX_OLD_SPACE_SIZE:-8192}"
 # Map OS_NAME to VSCODE_PLATFORM
 case "${OS_NAME}" in
   linux*)  VSCODE_PLATFORM="linux"  ;;
-  darwin*) VSCODE_PLATFORM="darwin" ;;
+  osx*)    VSCODE_PLATFORM="darwin" ;;
   win*)    VSCODE_PLATFORM="win32"  ;;
   *)       echo "Unknown OS: ${OS_NAME}"; exit 1 ;;
 esac
@@ -251,9 +270,20 @@ RUNEOF
   chmod +x "${OUTPUT_DIR}/run.sh"
 
   # Create the archive
-  echo "  Creating archive: ${OUTPUT_DIR}/vscodium-web-${VSCODE_PLATFORM}-${VSCODE_ARCH}-${RELEASE_VERSION}.tar.gz"
-  tar czf "${OUTPUT_DIR}/vscodium-web-${VSCODE_PLATFORM}-${VSCODE_ARCH}-${RELEASE_VERSION}.tar.gz" \
-    -C "${OUTPUT_DIR}" server run.sh
+  if [[ "${OS_NAME}" == "windows" ]]; then
+    ARCHIVE_EXT="zip"
+    echo "  Creating archive: ${OUTPUT_DIR}/vscodium-web-${VSCODE_PLATFORM}-${VSCODE_ARCH}-${RELEASE_VERSION}.zip"
+    if command -v 7z &>/dev/null; then
+      cd "${OUTPUT_DIR}" && 7z a "vscodium-web-${VSCODE_PLATFORM}-${VSCODE_ARCH}-${RELEASE_VERSION}.zip" server run.sh && cd ..
+    else
+      cd "${OUTPUT_DIR}" && zip -r "vscodium-web-${VSCODE_PLATFORM}-${VSCODE_ARCH}-${RELEASE_VERSION}.zip" server run.sh && cd ..
+    fi
+  else
+    ARCHIVE_EXT="tar.gz"
+    echo "  Creating archive: ${OUTPUT_DIR}/vscodium-web-${VSCODE_PLATFORM}-${VSCODE_ARCH}-${RELEASE_VERSION}.tar.gz"
+    tar czf "${OUTPUT_DIR}/vscodium-web-${VSCODE_PLATFORM}-${VSCODE_ARCH}-${RELEASE_VERSION}.tar.gz" \
+      -C "${OUTPUT_DIR}" server run.sh
+  fi
 
   echo ""
   echo "═══════════════════════════════════════════════════════════════"
@@ -263,7 +293,7 @@ RUNEOF
   echo "  Web server package: web-build/"
   echo "    Server:     web-build/server/"
   echo "    Run script: web-build/run.sh"
-  echo "    Archive:    web-build/vscodium-web-${VSCODE_PLATFORM}-${VSCODE_ARCH}-${RELEASE_VERSION}.tar.gz"
+  echo "    Archive:    web-build/vscodium-web-${VSCODE_PLATFORM}-${VSCODE_ARCH}-${RELEASE_VERSION}.${ARCHIVE_EXT}"
   echo ""
   echo "  Quick start:"
   echo "    cd web-build && ./run.sh"

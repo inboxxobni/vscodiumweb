@@ -26,9 +26,20 @@ web-build.tar.gz
 
 # Build logs
 *.log
+logs/
+
+# Package build artifacts
+deb-pkg/
+release-artifacts/
+build-input/
+
+# Node
+node_modules/
+package-lock.json
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*.swm
