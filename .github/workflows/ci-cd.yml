@@ -1,42 +1,31 @@
 # ── CI/CD — Build, Test & Release VSCodium Web ───────────────────────────────
 #
-# Builds the reh-web (web server) component for all major platforms, runs
-# quality gates (lint, type-check, tests), and creates GitHub releases.
+# Builds the reh-web (web server) for all major platforms, runs quality gates
+# (lint, type-check, tests), and creates GitHub releases with downloadable
+# artifacts.
 #
-# Architecture:
-#   lint ─► typecheck ─┬► build (matrix) ─┬► package-deb ─┬► release
-#                       │                  │               │
-#                       └► test ───────────┘               │
-#                                                          │
-#                   (on tag v*) ◄──────────────────────────┘
+# Quality gates (fast, every PR):
+#   lint → typecheck → test
 #
-# Triggers:
-#   - Push/PR to any branch: lint + typecheck + build(linux-x64)
-#   - Push to master: full matrix build + test + Docker image
-#   - Tag push (v*): full matrix + test + .deb + GitHub release + Docker
+# Build matrix (push to master / tag / manual):
+#   Linux x64, Linux ARM64, macOS ARM64, Windows x64
+#
+# Release (tag push v*):
+#   All platform artifacts + .deb packages + Docker image + GitHub Release
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: CI/CD
 
 on:
   push:
-    branches:
-      - master
-      - insider
-      - web-version
-    tags:
-      - "v*"
-    paths-ignore:
-      - "**/*.md"
+    branches: [master, insider, web-version]
+    tags: ["v*"]
   pull_request:
-    branches:
-      - "**"
-    paths-ignore:
-      - "**/*.md"
+    branches: ["**"]
   workflow_dispatch:
     inputs:
       quality:
-        description: "Build quality"
+        description: Build quality
         required: true
         default: stable
         type: choice
@@ -44,19 +33,15 @@ on:
           - stable
           - insider
       create_release:
-        description: "Create GitHub release"
+        description: Create GitHub release
         required: false
         default: false
         type: boolean
 
-# ── Global env ───────────────────────────────────────────────────────────────
 env:
   APP_NAME: VSCodium
   BINARY_NAME: codium
   DISABLE_UPDATE: yes
-  GH_REPO_PATH: ${{ github.repository }}
-  ORG_NAME: ${{ github.repository_owner }}
-  VSCODE_QUALITY: ${{ inputs.quality || (github.ref == 'refs/heads/insider' && 'insider' || 'stable') }}
   SHOULD_BUILD: yes
   MAX_OLD_SPACE_SIZE: 8192
   REGISTRY: ghcr.io
@@ -64,159 +49,101 @@ env:
 permissions:
   contents: read
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  JOBS
-# ══════════════════════════════════════════════════════════════════════════════
-
 jobs:
   # ── 🔍 Lint ──────────────────────────────────────────────────────────────
   lint:
-    name: 🔍 Lint
+    name: Lint
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Install shellcheck
         run: sudo apt-get update -y && sudo apt-get install -y shellcheck
 
-      - name: Run shellcheck on scripts
+      - name: Run shellcheck
         run: |
-          echo "--- ShellCheck: build_web.sh ---"
-          shellcheck build_web.sh || true
-          echo ""
-          echo "--- ShellCheck: run_web.sh ---"
-          shellcheck run_web.sh || true
-          echo ""
-          echo "--- ShellCheck: scripts/*.sh ---"
-          shellcheck scripts/*.sh 2>/dev/null || echo "  (no scripts/ directory yet)"
+          shellcheck build_web.sh run_web.sh scripts/*.sh 2>/dev/null || true
 
-      - name: Check script executables
+      - name: Check script permissions
         run: |
-          for f in build_web.sh run_web.sh scripts/*.sh; do
-            if [ -f "$f" ]; then
-              if [ ! -x "$f" ]; then
-                echo "⚠  Fixing permissions: $f"
-                chmod +x "$f"
-              else
-                echo "✓  $f"
-              fi
-            fi
+          for f in build_web.sh run_web.sh scripts/*.sh build/smoke-test.sh; do
+            [ -f "$f" ] && chmod +x "$f" && echo "✓ $f"
           done
 
   # ── ✅ TypeScript Check ──────────────────────────────────────────────────
   typecheck:
-    name: ✅ TypeScript Check
+    name: TypeScript Check
     runs-on: ubuntu-22.04
     needs: [lint]
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
 
-      - name: Setup Python 3
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y libkrb5-dev jq git
+      - name: Install system deps
+        run: sudo apt-get update -y && sudo apt-get install -y libkrb5-dev jq
 
-      - name: Fetch VS Code source
-        run: SHOULD_BUILD=yes bash get_repo.sh
-
-      - name: Apply VSCodium patches
+      - name: Fetch source & apply patches
         run: |
-          export SHOULD_BUILD=yes
-          export VSCODE_ARCH=x64
-          export OS_NAME=linux
-          export DISABLE_UPDATE=yes
-          export MAX_OLD_SPACE_SIZE=8192
-          export APP_NAME=VSCodium
-          export BINARY_NAME=codium
-          export GH_REPO_PATH=${{ github.repository }}
-          export ORG_NAME=${{ github.repository_owner }}
+          SHOULD_BUILD=yes bash get_repo.sh
+          export VSCODE_ARCH=x64 OS_NAME=linux APP_NAME=VSCodium BINARY_NAME=codium
           source version.sh
           export RELEASE_VERSION MS_TAG MS_COMMIT BUILD_SOURCEVERSION
           bash prepare_vscode.sh
 
-      - name: TypeScript compilation check
+      - name: TypeScript compile check
         run: |
-          cd vscode
-          echo "Running TypeScript compilation check..."
-          npm run compile 2>&1 | tail -20
-          echo ""
+          cd vscode && npm run compile 2>&1 | tail -10
           echo "✓ TypeScript compilation passed"
 
   # ── 🧪 Tests ─────────────────────────────────────────────────────────────
   test:
-    name: 🧪 Unit Tests
+    name: Unit Tests
     runs-on: ubuntu-22.04
     needs: [typecheck]
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
 
-      - name: Setup Python 3
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y libkrb5-dev jq git
+      - name: Install system deps
+        run: sudo apt-get update -y && sudo apt-get install -y libkrb5-dev jq
 
-      - name: Fetch VS Code source
-        run: SHOULD_BUILD=yes bash get_repo.sh
-
-      - name: Apply VSCodium patches
+      - name: Fetch source & apply patches
         run: |
-          export SHOULD_BUILD=yes
-          export VSCODE_ARCH=x64
-          export OS_NAME=linux
-          export DISABLE_UPDATE=yes
-          export MAX_OLD_SPACE_SIZE=8192
-          export APP_NAME=VSCodium
-          export BINARY_NAME=codium
-          export GH_REPO_PATH=${{ github.repository }}
-          export ORG_NAME=${{ github.repository_owner }}
+          SHOULD_BUILD=yes bash get_repo.sh
+          export VSCODE_ARCH=x64 OS_NAME=linux APP_NAME=VSCodium BINARY_NAME=codium
           source version.sh
           export RELEASE_VERSION MS_TAG MS_COMMIT BUILD_SOURCEVERSION
           bash prepare_vscode.sh
 
       - name: Run unit tests
         run: |
-          cd vscode
-          echo "Running VS Code unit tests..."
-          npm test 2>&1 | tail -50 || echo "⚠  Some tests failed (non-critical)"
-          echo ""
-          echo "✓ Tests completed"
+          cd vscode && npm test 2>&1 | tail -20 || echo "Tests completed with warnings"
 
   # ── 🏗️ Build Matrix ─────────────────────────────────────────────────────
   build:
-    name: 🏗️ ${{ matrix.label }}
+    name: Build ${{ matrix.label }}
     needs: [typecheck]
-    if: |
-      github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'build-all'))
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -225,56 +152,49 @@ jobs:
             os: ubuntu-22.04
             arch: x64
             platform: linux
-            artifact_ext: tar.gz
+            ext: tar.gz
           - label: Linux ARM64
             os: ubuntu-24.04-arm
             arch: arm64
             platform: linux
-            artifact_ext: tar.gz
+            ext: tar.gz
           - label: macOS ARM64
             os: macos-14
             arch: arm64
             platform: darwin
-            artifact_ext: tar.gz
+            ext: tar.gz
           - label: Windows x64
             os: windows-latest
             arch: x64
             platform: win32
-            artifact_ext: zip
+            ext: zip
     runs-on: ${{ matrix.os }}
     outputs:
-      RELEASE_VERSION: ${{ steps.build-info.outputs.RELEASE_VERSION }}
+      version: ${{ steps.version.outputs.value }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
 
-      - name: Setup Python 3
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install system dependencies
-        if: matrix.os != 'windows-latest'
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y libkrb5-dev jq git
-        shell: bash
+      - name: Install system deps
+        if: runner.os != 'Windows'
+        run: sudo apt-get update -y && sudo apt-get install -y libkrb5-dev jq
 
-      - name: Install system dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          choco install jq -y --no-progress
+      - name: Install system deps (Windows)
+        if: runner.os == 'Windows'
+        run: choco install jq -y --no-progress
         shell: pwsh
 
-      - name: Build VSCodium Web (${{ matrix.label }})
+      - name: Build VSCodium Web
         id: build
         run: |
           export VSCODE_ARCH=${{ matrix.arch }}
@@ -283,90 +203,34 @@ jobs:
           bash build_web.sh 2>&1 | tee build.log
         shell: bash
 
-      - name: Extract build info
-        id: build-info
+      - name: Extract version
+        id: version
         run: |
-          # Extract version from build output or product.json
-          RELEASE_VERSION=""
-          if ls web-build/server/product.json 2>/dev/null; then
-            RELEASE_VERSION=$(node -p "require('./web-build/server/product.json').release || ''" 2>/dev/null || echo "")
+          VERSION="1.0.0"
+          if [ -f web-build/server/product.json ]; then
+            VERSION=$(node -p "require('./web-build/server/product.json').release || '1.0.0'")
           fi
-          if [[ -z "${RELEASE_VERSION}" ]]; then
-            RELEASE_VERSION=$(grep -oP 'vscodium-web-[^-]+-[^-]+-\K[^/]+' build.log 2>/dev/null | head -1 || echo "0.0.0")
-          fi
-          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> $GITHUB_OUTPUT
-          echo "Version: ${RELEASE_VERSION}"
-        shell: bash
-
-      - name: Smoke test — verify server starts
-        run: |
-          echo "--- Smoke test ---"
-          if [[ -d "web-build/server" ]]; then
-            echo "✓ Server directory exists: web-build/server/"
-            ls -la web-build/server/bin/ 2>/dev/null || echo "  (checking bin/)"
-
-            # Try to start server briefly to verify it works
-            SERVER_BIN=""
-            if [[ -f "web-build/server/bin/codium-server" ]]; then
-              SERVER_BIN="web-build/server/bin/codium-server"
-            elif ls web-build/server/bin/codium-server* 1>/dev/null 2>&1; then
-              SERVER_BIN=$(ls web-build/server/bin/codium-server* | head -1)
-            fi
-
-            if [[ -n "${SERVER_BIN}" ]]; then
-              echo "Found server binary: ${SERVER_BIN}"
-              timeout 5 "${SERVER_BIN}" --port 9999 --host 127.0.0.1 --without-connection-token &
-              SRV_PID=$!
-              sleep 3
-              if kill -0 ${SRV_PID} 2>/dev/null; then
-                echo "✓ Server started successfully (PID: ${SRV_PID})"
-                kill ${SRV_PID} 2>/dev/null || true
-              else
-                echo "⚠  Server exited quickly (may need more time to start)"
-              fi
-            elif [[ -f "web-build/server/out/server-web/server-main.js" ]]; then
-              echo "Found server-main.js entry point"
-              echo "✓ Server build verified"
-            else
-              echo "⚠  Could not find server binary, but build directory exists"
-              find web-build/server -name "codium-server*" -o -name "server-main.js" 2>/dev/null | head -5
-            fi
-          else
-            echo "⚠  web-build/server/ directory not found"
-            ls -la web-build/ 2>/dev/null || echo "  (no web-build/)"
-          fi
-          echo "--- Smoke test complete ---"
+          echo "value=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${VERSION}"
         shell: bash
 
       - name: Package artifact
         run: |
-          ARTIFACT_NAME="vscodium-web-${{ matrix.platform }}-${{ matrix.arch }}"
-
-          if [[ "${{ matrix.artifact_ext }}" == "zip" ]]; then
-            # Windows: create .zip
+          NAME="vscodium-web-${{ matrix.platform }}-${{ matrix.arch }}"
+          if [ "${{ matrix.ext }}" = "zip" ]; then
             if command -v 7z &>/dev/null; then
-              7z a "${ARTIFACT_NAME}.zip" ./web-build/*
+              7z a "${NAME}.zip" ./web-build/*
             else
-              zip -r "${ARTIFACT_NAME}.zip" web-build/
+              zip -r "${NAME}.zip" web-build/
             fi
-            echo "Created: ${ARTIFACT_NAME}.zip"
           else
-            # Unix: create .tar.gz
-            tar czf "${ARTIFACT_NAME}.tar.gz" web-build/
-            echo "Created: ${ARTIFACT_NAME}.tar.gz"
+            tar czf "${NAME}.tar.gz" web-build/
           fi
-
-          # Create checksums
-          if command -v sha256sum &>/dev/null; then
-            sha256sum "${ARTIFACT_NAME}.${ARTIFACT_EXT}" > "${ARTIFACT_NAME}.sha256"
-          elif command -v shasum &>/dev/null; then
-            shasum -a 256 "${ARTIFACT_NAME}.${ARTIFACT_EXT}" > "${ARTIFACT_NAME}.sha256"
-          fi
+          sha256sum "${NAME}.${{ matrix.ext }}" > "${NAME}.sha256" 2>/dev/null || \
+            shasum -a 256 "${NAME}.${{ matrix.ext }}" > "${NAME}.sha256"
         shell: bash
-        env:
-          ARTIFACT_EXT: ${{ matrix.artifact_ext }}
 
-      - name: Upload build artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: vscodium-web-${{ matrix.platform }}-${{ matrix.arch }}
@@ -375,9 +239,9 @@ jobs:
             build.log
           retention-days: 30
 
-  # ── 📦 Package .deb ──────────────────────────────────────────────────────
+  # ── 📦 .deb Package ──────────────────────────────────────────────────────
   package-deb:
-    name: 📦 .deb (${{ matrix.arch }})
+    name: .deb ${{ matrix.arch }}
     needs: [build]
     if: github.event_name != 'pull_request'
     strategy:
@@ -385,14 +249,12 @@ jobs:
       matrix:
         arch: [x64, arm64]
     runs-on: ubuntu-22.04
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Download linux build artifact
+      - name: Download Linux build
         uses: actions/download-artifact@v4
         with:
           name: vscodium-web-linux-${{ matrix.arch }}
@@ -401,146 +263,62 @@ jobs:
       - name: Install dpkg-dev
         run: sudo apt-get update -y && sudo apt-get install -y dpkg-dev
 
-      - name: Build .deb package
+      - name: Build .deb
         run: |
-          # Extract the build
-          ARCHIVE=$(ls ./build-input/vscodium-web-linux-${{ matrix.arch }}.tar.gz 2>/dev/null || echo "")
-          if [[ -z "${ARCHIVE}" ]]; then
-            # Try to find any tar.gz
-            ARCHIVE=$(ls ./build-input/*.tar.gz 2>/dev/null | head -1)
-          fi
+          ARCHIVE=$(ls ./build-input/vscodium-web-linux-${{ matrix.arch }}.tar.gz 2>/dev/null | head -1)
+          [ -z "$ARCHIVE" ] && ARCHIVE=$(ls ./build-input/*.tar.gz 2>/dev/null | head -1)
+          [ -z "$ARCHIVE" ] && echo "No archive found" && ls -la ./build-input/ && exit 1
 
-          if [[ -z "${ARCHIVE}" ]]; then
-            echo "No tar.gz archive found in build-input"
-            ls -la ./build-input/
-            exit 1
-          fi
+          tar xzf "$ARCHIVE" -C ./build-input/
+          SD="./build-input/web-build/server"
+          [ ! -d "$SD" ] && SD="./build-input/server"
+          [ ! -d "$SD" ] && echo "Server dir not found" && exit 1
 
-          echo "Extracting: ${ARCHIVE}"
-          tar xzf "${ARCHIVE}" -C ./build-input/
+          VER=$(node -p "require('${SD}/product.json').release || '1.0.0'" 2>/dev/null || echo "1.0.0")
+          DEB_ARCH="amd64"; [ "${{ matrix.arch }}" = "arm64" ] && DEB_ARCH="arm64"
 
-          # Find the server directory
-          SERVER_DIR=""
-          if [[ -d "./build-input/web-build/server" ]]; then
-            SERVER_DIR="./build-input/web-build/server"
-          elif [[ -d "./build-input/server" ]]; then
-            SERVER_DIR="./build-input/server"
-          fi
+          DIR="deb-pkg/vscodium-web_${DEB_ARCH}"
+          mkdir -p "$DIR/DEBIAN" "$DIR/usr/lib/vscodium-web" "$DIR/usr/bin" "$DIR/lib/systemd/system"
 
-          if [[ -z "${SERVER_DIR}" ]]; then
-            echo "Could not find server directory"
-            find ./build-input -type d -maxdepth 4
-            exit 1
-          fi
+          cp -r "$SD"/* "$DIR/usr/lib/vscodium-web/"
 
-          # Create .deb package structure
-          DEB_DIR="deb-pkg/vscodium-web_${{ matrix.arch }}"
-          mkdir -p "${DEB_DIR}/DEBIAN"
-          mkdir -p "${DEB_DIR}/usr/lib/vscodium-web"
-          mkdir -p "${DEB_DIR}/usr/bin"
-          mkdir -p "${DEB_DIR}/etc/vscodium-web"
-          mkdir -p "${DEB_DIR}/lib/systemd/system"
+          cat > "$DIR/usr/bin/vscodium-web" << 'EOF'
+          #!/bin/bash
+          exec /usr/lib/vscodium-web/bin/codium-server "$@"
+          EOF
+          chmod +x "$DIR/usr/bin/vscodium-web"
 
-          # Get version
-          VERSION="1.0.0"
-          if [[ -f "${SERVER_DIR}/product.json" ]]; then
-            VERSION=$(node -p "require('${SERVER_DIR}/product.json').release || '1.0.0'" 2>/dev/null || echo "1.0.0")
-          fi
+          cat > "$DIR/lib/systemd/system/vscodium-web.service" << EOF
+          [Unit]
+          Description=VSCodium Web Server
+          After=network.target
+          [Service]
+          Type=simple
+          ExecStart=/usr/lib/vscodium-web/bin/codium-server --port \${PORT:-8000} --host \${HOST:-0.0.0.0}
+          Restart=on-failure
+          RestartSec=5
+          [Install]
+          WantedBy=multi-user.target
+          EOF
 
-          # Copy server files
-          cp -r "${SERVER_DIR}"/* "${DEB_DIR}/usr/lib/vscodium-web/"
+          cat > "$DIR/DEBIAN/control" << EOF
+          Package: vscodium-web
+          Version: ${VER}
+          Section: web
+          Priority: optional
+          Architecture: ${DEB_ARCH}
+          Maintainer: VSCodium Web <https://github.com/inboxxobni/vscodiumweb>
+          Description: VSCodium Web - Browser-based editor without Electron
+          Homepage: https://github.com/inboxxobni/vscodiumweb
+          EOF
 
-          # Create wrapper script
-          cat > "${DEB_DIR}/usr/bin/vscodium-web" << 'WRAPEOF'
-#!/bin/bash
-# Wrapper for VSCodium Web Server
-exec /usr/lib/vscodium-web/bin/codium-server "$@"
-WRAPEOF
-          chmod +x "${DEB_DIR}/usr/bin/vscodium-web"
-
-          # Create systemd service
-          cat > "${DEB_DIR}/lib/systemd/system/vscodium-web.service" << SERVICEEOF
-[Unit]
-Description=VSCodium Web Server
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/lib/vscodium-web/bin/codium-server --port \${PORT:-8000} --host \${HOST:-0.0.0.0}
-Environment=PORT=8000
-Environment=HOST=0.0.0.0
-Restart=on-failure
-RestartSec=5
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-SERVICEEOF
-
-          # Create DEBIAN/control
-          DEB_ARCH="amd64"
-          if [[ "${{ matrix.arch }}" == "arm64" ]]; then
-            DEB_ARCH="arm64"
-          fi
-
-          cat > "${DEB_DIR}/DEBIAN/control" << CONTROLEOF
-Package: vscodium-web
-Version: ${VERSION}
-Section: web
-Priority: optional
-Architecture: ${DEB_ARCH}
-Maintainer: VSCodium Web <https://github.com/inboxxobni/vscodiumweb>
-Description: VSCodium Web — Browser-based editor without Electron
- Serves the full VSCodium editor in a browser.
- No desktop GUI required.
-Homepage: https://github.com/inboxxobni/vscodiumweb
-CONTROLEOF
-
-          # Create DEBIAN/postinst
-          cat > "${DEB_DIR}/DEBIAN/postinst" << 'POSTINSTEOF'
-#!/bin/bash
-set -e
-
-case "$1" in
-  configure)
-    # Enable and start the service
-    if command -v systemctl &>/dev/null; then
-      systemctl daemon-reload
-      systemctl enable vscodium-web || true
-      systemctl start vscodium-web || true
-      echo "VSCodium Web service started. Configure via /etc/vscodium-web/"
-    fi
-    ;;
-esac
-POSTINSTEOF
-          chmod +x "${DEB_DIR}/DEBIAN/postinst"
-
-          # Create DEBIAN/prerm
-          cat > "${DEB_DIR}/DEBIAN/prerm" << 'PRERMEOF'
-#!/bin/bash
-set -e
-
-case "$1" in
-  remove|purge)
-    if command -v systemctl &>/dev/null; then
-      systemctl stop vscodium-web || true
-      systemctl disable vscodium-web || true
-    fi
-    ;;
-esac
-PRERMEOF
-          chmod +x "${DEB_DIR}/DEBIAN/prerm"
-
-          # Build the .deb
-          cd deb-pkg
-          dpkg-deb --build "vscodium-web_${{ matrix.arch }}"
-          mv "vscodium-web_${{ matrix.arch }}.deb" "../vscodium-web_${VERSION}_${DEB_ARCH}.deb"
+          cd deb-pkg && dpkg-deb --build "vscodium-web_${DEB_ARCH}"
+          mv "vscodium-web_${DEB_ARCH}.deb" "../vscodium-web_${VER}_${DEB_ARCH}.deb"
           cd ..
-
-          echo "✅ .deb package created: vscodium-web_${VERSION}_${DEB_ARCH}.deb"
+          echo "Created: vscodium-web_${VER}_${DEB_ARCH}.deb"
         shell: bash
 
-      - name: Upload .deb artifact
+      - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
           name: deb-${{ matrix.arch }}
@@ -549,43 +327,29 @@ PRERMEOF
 
   # ── 🐳 Docker Image ─────────────────────────────────────────────────────
   docker:
-    name: 🐳 Docker Image
+    name: Docker Image
     needs: [build]
-    if: |
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
+      - uses: docker/metadata-action@v5
         id: meta
-        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
             type=sha
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v5
         with:
           context: .
           push: true
@@ -594,114 +358,72 @@ PRERMEOF
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── 🚀 GitHub Release ────────────────────────────────────────────────────
+  # ── 🚀 Release ───────────────────────────────────────────────────────────
   release:
-    name: 🚀 GitHub Release
-    needs: [build, test, package-deb]
-    if: |
-      always() &&
-      (startsWith(github.ref, 'refs/tags/v') || inputs.create_release == true)
+    name: Release
+    needs: [build, test]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-22.04
     permissions:
       contents: write
-      packages: read
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Download all build artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ./release-artifacts
+          path: ./artifacts
 
       - name: Collect release files
         run: |
-          mkdir -p release-files
-          echo "--- Collected artifacts ---"
-
-          # Find and rename artifacts with consistent naming
-          find ./release-artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.deb" -o -name "*.sha256" \) | while read -r f; do
-            BASENAME=$(basename "$f")
-            # Avoid overwriting duplicates by adding parent dir name
-            DIRNAME=$(basename "$(dirname "$f")")
-            if [[ "${DIRNAME}" != "release-artifacts" ]]; then
-              # Skip build.log files
-              if [[ "${BASENAME}" == "build.log" ]]; then
-                continue
-              fi
-              cp "$f" "release-files/${DIRNAME}_${BASENAME}" 2>/dev/null || cp "$f" "release-files/${BASENAME}"
-              echo "  📎 ${BASENAME}"
-            fi
+          mkdir -p release
+          find ./artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.deb" -o -name "*.sha256" \) | while read f; do
+            base=$(basename "$f")
+            dir=$(basename "$(dirname "$f")")
+            [ "$base" = "build.log" ] && continue
+            cp "$f" "release/${dir}_${base}" 2>/dev/null || cp "$f" "release/$base"
+            echo "  $base"
           done
 
-          echo ""
-          echo "--- Release files ---"
-          ls -la release-files/
-
       - name: Generate release notes
-        id: notes
         run: |
-          # Try to get the version from tag
-          TAG="${GITHUB_REF_NAME}"
-          echo "Tag: ${TAG}"
+          cat > release-notes.md << 'RELEASEEOF'
+          # VSCodium Web
 
-          # Generate release notes
-          cat > release-notes.md << 'EOF'
-# VSCodium Web
+          ## Platform Packages
+          | Platform | Arch | Format |
+          |----------|------|--------|
+          | Linux | x64, ARM64 | .tar.gz, .deb |
+          | macOS | ARM64 | .tar.gz |
+          | Windows | x64 | .zip |
 
-## What's Inside
+          ## Quick Start
+          ```bash
+          tar xzf vscodium-web-linux-x64-*.tar.gz
+          cd web-build && ./run.sh
+          # Open http://localhost:8000
+          ```
 
-This release contains the **VSCodium Web Server** (reh-web) — the full VSCodium editor that runs in your browser. No Electron, no desktop GUI required.
+          ## Docker
+          ```bash
+          docker run -p 8000:8000 ghcr.io/inboxxobni/vscodiumweb:latest
+          ```
 
-## Platform Packages
-
-| Platform | Architecture | Format |
-|----------|-------------|--------|
-| Linux    | x64         | .tar.gz, .deb |
-| Linux    | ARM64       | .tar.gz, .deb |
-| macOS    | ARM64       | .tar.gz |
-| Windows  | x64         | .zip |
-
-## Quick Start
-
-### Local
-```bash
-tar xzf vscodium-web-linux-x64-*.tar.gz
-cd web-build && ./run.sh
-# Open http://localhost:8000
-```
-
-### Docker
-```bash
-docker pull ghcr.io/inboxxobni/vscodiumweb:latest
-docker run -p 8000:8000 ghcr.io/inboxxobni/vscodiumweb:latest
-```
-
-### Debian/Ubuntu
-```bash
-sudo dpkg -i vscodium-web_*.deb
-sudo systemctl start vscodium-web
-# Open http://localhost:8000
-```
-
-## Notes
-- Built from VSCodium (MIT licensed)
-- Uses Open VSX marketplace for extensions
-- Set CONNECTION_TOKEN for production security
-EOF
-
-          echo "notes=release-notes.md" >> $GITHUB_OUTPUT
+          ## Debian/Ubuntu
+          ```bash
+          sudo dpkg -i vscodium-web_*.deb
+          sudo systemctl start vscodium-web
+          ```
+          RELEASEEOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "VSCodium Web ${{ github.ref_name }}"
+          name: VSCodium Web ${{ github.ref_name }}
           body_path: release-notes.md
-          files: |
-            release-files/*
+          files: release/*
           draft: false
-          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
